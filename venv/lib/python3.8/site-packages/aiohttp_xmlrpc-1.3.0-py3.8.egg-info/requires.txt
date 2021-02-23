@@ -1,0 +1,7 @@
+aiohttp
+lxml
+
+[develop]
+pytest
+pytest-cov
+xmltodict

@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from . import dec
 
 
-router = APIRouter()
+router = APIRouter(prefix="/usi")
 
 
 @dec(router)

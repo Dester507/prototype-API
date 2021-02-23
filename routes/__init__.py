@@ -8,7 +8,7 @@ from fastapi.types import DecoratedCallable
 # Custom wrapper
 def dec(router: APIRouter, **kwargs) -> Callable[[DecoratedCallable], DecoratedCallable]:
     def decorator(func) -> Callable:
-        @router.post(path=f"/{func.__name__}", name=f"{router.prefix}_{func.__name__}", **kwargs)
+        @router.post(path=f"/{func.__name__}", name=f"{router.prefix[1:]}_{func.__name__}", **kwargs)
         @wraps(func)
         async def wrapper(*args, **kwargs):
             return await func(*args, **kwargs)
