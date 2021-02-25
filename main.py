@@ -1,8 +1,11 @@
-from typing import Optional
+from json import dumps, loads
 
 from fastapi import FastAPI
-from starlette.types import Scope, Receive, Send, ASGIApp
+from starlette.types import Scope, Receive, Send, ASGIApp, Message
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import Request
+#from msgpack import unpackb, packb
+import msgpack
 
 from routes import rpc, system, usi
 from parser.handler import Handle
@@ -24,11 +27,68 @@ sub_api.include_router(usi.router, tags=['Usi'])
 class CustomMiddleware:
     def __init__(self, app: ASGIApp):
         self.app = app
+        self.initial_message: Message = {}
+        self.should_decode_from_msgpack_to_json = False
+        self.should_encode_from_json_to_msgpack = False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        request = Request(scope, receive=receive)
-        scope["path"], args = await Handle(await request.body()).handle()
-        await self.app(scope, receive, send)
+        headers = Headers(scope=scope)
+        self.should_decode_from_msgpack_to_json = (
+            "application/x-msgpack" in headers.get("content-type", "")
+        )
+        self.should_encode_from_json_to_msgpack = (
+            "application/x-msgpack" in headers.getlist("accept")
+        )
+        self.receive = receive
+        self.send = send
+        # request.scope["path"], request.body = await Handle(await request.body()).handle()
+        # request.body = b'{\n    "name": "Tolik",\n    "surname": "Demchuk"\n}\n'
+        await self.app(scope, self.make_receive, self.send)
+
+    async def make_receive(self) -> Message:
+        message = await self.receive()
+        if not self.should_decode_from_msgpack_to_json:
+            return message
+        assert message["type"] == "http.request"
+        body = message["body"]
+        more_body = message.get("more_body", False)
+        if more_body:
+            message = await self.receive()
+            if message["body"] != b"":
+                raise NotImplementedError(
+                    "Streaming the request body isn`t supported yet"
+                )
+        message["body"] = dumps({"name": "vlad", "surname": "Dester"}).encode()
+        print(message["body"])
+        return message
+
+    # async def make_send(self, message: Message) -> None:
+    #     if not self.should_encode_from_json_to_msgpack:
+    #         await self.send(message)
+    #         return
+    #     if message["type"] == "http.response.start":
+    #         headers = Headers(raw=message["headers"])
+    #         if headers["content-type"] != "application/json":
+    #             self.should_encode_from_json_to_msgpack = False
+    #             await self.send(message)
+    #             return
+    #         self.initial_message = message
+    #     elif message["type"] == "http.response.body":
+    #         assert self.should_encode_from_json_to_msgpack
+    #         body = message.get("body", b"")
+    #         more_body = message.get("more_body", False)
+    #         if more_body:
+    #             raise NotImplementedError(
+    #                 "Streaming the response body isn`t supported yet"
+    #             )
+    #         body = msgpack.packb(loads(body))
+    #         print(body)
+    #         headers = MutableHeaders(raw=self.initial_message["headers"])
+    #         headers["Content-Type"] = "application/x-msgpack"
+    #         headers["Content_Length"] = str(len(body))
+    #         message["body"] = body
+    #         await self.send(self.initial_message)
+    #         await self.send(message)
 
 
 sub_api.add_middleware(CustomMiddleware)
