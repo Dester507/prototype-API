@@ -1,9 +1,11 @@
 import asyncio
+from inspect import signature
 
 from aiohttp_xmlrpc.common import xml2py, schema, py2xml
 from lxml import etree
 from starlette.routing import NoMatchFound
 from fastapi.responses import Response, JSONResponse
+from routes.rpc import test_function
 
 
 class Handle:
@@ -23,7 +25,12 @@ class Handle:
                 xml_request.xpath("//params/param/value")
             )
         )
-        return method_url, args
+        ans = {}
+        count = 0
+        for x in signature(test_function).parameters.keys():
+            ans[x] = args[count]
+            count += 1
+        return method_url, ans
 
     async def parse_body(self):
         loop = asyncio.get_event_loop()

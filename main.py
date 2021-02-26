@@ -4,8 +4,6 @@ from fastapi import FastAPI
 from starlette.types import Scope, Receive, Send, ASGIApp, Message
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import Request
-#from msgpack import unpackb, packb
-import msgpack
 
 from routes import rpc, system, usi
 from parser.handler import Handle
@@ -41,7 +39,28 @@ class CustomMiddleware:
         )
         self.receive = receive
         self.send = send
-        # request.scope["path"], request.body = await Handle(await request.body()).handle()
+        bb = b'''<?xml version="1.0" encoding="ASCII"?>
+<methodCall>
+    <methodName>rpc_test_function</methodName>
+    <params>
+        <param>
+            <value>
+                <string>
+                    Tolik
+                </string>
+            </value>
+        </param>
+
+        <param>
+            <value>
+                <string>
+                    Demchuk
+                </string>
+            </value>
+        </param>
+    </params>
+</methodCall>'''
+        scope["path"] = await Handle(bb).handle()
         # request.body = b'{\n    "name": "Tolik",\n    "surname": "Demchuk"\n}\n'
         await self.app(scope, self.make_receive, self.send)
 
@@ -52,6 +71,7 @@ class CustomMiddleware:
         assert message["type"] == "http.request"
         body = message["body"]
         more_body = message.get("more_body", False)
+        print(body)
         if more_body:
             message = await self.receive()
             if message["body"] != b"":
