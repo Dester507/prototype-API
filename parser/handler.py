@@ -13,11 +13,13 @@ class Handle:
         self.xml_body = xml_body
         self.THREAD_POOL_EXECUTOR = None
 
-    async def handle(self):
+    async def handle(self, method="full"):
         xml_request = await self.parse_body()
 
         full_method_name = xml_request.xpath("//methodName[1]")[0].text
         method_url = await self.lookup_method(full_method_name)
+        if method == "url":
+            return method_url
 
         args = list(
             map(
@@ -68,9 +70,9 @@ class Handle:
         try:
             return sub_api.url_path_for(full_name)
         except NoMatchFound:
-            print("bad")
+            return None
             #xml_error = Handle.format_error("Function doesn`t exist")
-            return JSONResponse(content="Method doesnt exist")  # FastAPI BAD Response XML
+            #return JSONResponse(content="Method doesnt exist")  # FastAPI BAD Response XML
 
 
 

@@ -1,9 +1,9 @@
-from json import dumps, loads
+from json import dumps
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from starlette.types import Scope, Receive, Send, ASGIApp, Message
-from starlette.datastructures import Headers, MutableHeaders
-from starlette.requests import Request
+from starlette.datastructures import Headers
 
 from routes import rpc, system, usi
 from parser.handler import Handle
@@ -28,6 +28,7 @@ class CustomMiddleware:
         self.initial_message: Message = {}
         self.should_decode_from_msgpack_to_json = False
         self.should_encode_from_json_to_msgpack = False
+        self.message = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         headers = Headers(scope=scope)
@@ -39,48 +40,35 @@ class CustomMiddleware:
         )
         self.receive = receive
         self.send = send
-        bb = b'''<?xml version="1.0" encoding="ASCII"?>
-<methodCall>
-    <methodName>rpc_test_function</methodName>
-    <params>
-        <param>
-            <value>
-                <string>
-                    Tolik
-                </string>
-            </value>
-        </param>
-
-        <param>
-            <value>
-                <string>
-                    Demchuk
-                </string>
-            </value>
-        </param>
-    </params>
-</methodCall>'''
-        scope["path"] = await Handle(bb).handle()
-        # request.body = b'{\n    "name": "Tolik",\n    "surname": "Demchuk"\n}\n'
+        self.scope = scope
+        scope = await self.make_scope()
         await self.app(scope, self.make_receive, self.send)
 
     async def make_receive(self) -> Message:
-        message = await self.receive()
         if not self.should_decode_from_msgpack_to_json:
-            return message
-        assert message["type"] == "http.request"
-        body = message["body"]
-        more_body = message.get("more_body", False)
-        print(body)
+            return self.message
+        assert self.message["type"] == "http.request"
+        body = self.message["body"]
+        more_body = self.message.get("more_body", False)
         if more_body:
-            message = await self.receive()
-            if message["body"] != b"":
+            self.message = await self.receive()
+            if body != b"":
                 raise NotImplementedError(
                     "Streaming the request body isn`t supported yet"
                 )
-        message["body"] = dumps({"name": "vlad", "surname": "Dester"}).encode()
-        print(message["body"])
-        return message
+        self.scope["path"], new_body = await Handle(self.message["body"]).handle()
+        self.message["body"] = dumps(new_body).encode()
+        return self.message
+
+    async def make_scope(self) -> Scope:
+        self.message = await self.receive()
+        method_url = await Handle(self.message["body"]).handle(method="url")
+        if method_url is None:
+            pass
+            # return JSONResponse(content="Method doesnt exists")
+        else:
+            self.scope["path"] = method_url
+            return self.scope
 
     # async def make_send(self, message: Message) -> None:
     #     if not self.should_encode_from_json_to_msgpack:
@@ -118,9 +106,3 @@ sub_api.add_middleware(CustomMiddleware)
 @main_api.post("/test-function")
 async def test_function():
     return {"Details": "Test function for main API"}
-
-
-# Middleware that handles body-xml requests
-@sub_api.middleware("http")
-async def xml_handler_middleware(request: Request, call_next):
-    return await call_next(request)
