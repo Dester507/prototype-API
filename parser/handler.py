@@ -4,7 +4,9 @@ from inspect import signature
 from aiohttp_xmlrpc.common import xml2py, schema, py2xml
 from lxml import etree
 from starlette.routing import NoMatchFound
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import Response
+from fastapi import HTTPException
+
 from routes.rpc import test_function
 
 
@@ -27,11 +29,13 @@ class Handle:
                 xml_request.xpath("//params/param/value")
             )
         )
+        print(args)
         ans = {}
         count = 0
         for x in signature(test_function).parameters.keys():
             ans[x] = args[count]
             count += 1
+        print(ans)
         return method_url, ans
 
     async def parse_body(self):
@@ -59,20 +63,19 @@ class Handle:
         xml_fault = etree.Element("fault")
         xml_value = etree.Element("value")
 
-        xml_value.append(py2xml(exception))
+        xml_value.append(py2xml(str(exception)))
         xml_fault.append(xml_value)
         xml_response.append(xml_fault)
-        return xml_response
+        return etree.tostring(xml_response, xml_declaration=True, encoding="utf-8")
 
     @staticmethod
     async def lookup_method(full_name):
         from main import sub_api
         try:
             return sub_api.url_path_for(full_name)
-        except NoMatchFound:
-            return None
-            #xml_error = Handle.format_error("Function doesn`t exist")
-            #return JSONResponse(content="Method doesnt exist")  # FastAPI BAD Response XML
+        except NoMatchFound as ex:
+            xml_error = Handle.format_error(ex)
+            raise HTTPException(status_code=200, detail=xml_error)
 
 
 

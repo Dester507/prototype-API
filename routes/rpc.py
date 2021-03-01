@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Body
+from pydantic import BaseModel
 
 from . import dec
 
@@ -6,9 +7,14 @@ from . import dec
 router = APIRouter(prefix='/rpc')
 
 
+class User(BaseModel):
+    age: int
+    year: int
+
+
 @dec(router)
-async def test_function(name: str = Body(...), surname: str = Body(...)):
-    return {"msg": f"{name} {surname}, you have new msg from Rpc"}
+async def test_function(user: User, name: str = Body(...), surname: str = Body(...)):
+    return {"msg": f"{name} {surname} {user.age}, {user.year}, you have new msg from Rpc"}
 
 
 @dec(router)

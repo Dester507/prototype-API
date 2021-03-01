@@ -26,27 +26,21 @@ class CustomMiddleware:
     def __init__(self, app: ASGIApp):
         self.app = app
         self.initial_message: Message = {}
-        self.should_decode_from_msgpack_to_json = False
-        self.should_encode_from_json_to_msgpack = False
         self.message = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         headers = Headers(scope=scope)
-        self.should_decode_from_msgpack_to_json = (
-            "application/x-msgpack" in headers.get("content-type", "")
-        )
-        self.should_encode_from_json_to_msgpack = (
-            "application/x-msgpack" in headers.getlist("accept")
-        )
+        # If body in json
+        if "xml" not in headers.get("content-type", ""):
+            return await self.app(scope, receive, send)
         self.receive = receive
         self.send = send
         self.scope = scope
         scope = await self.make_scope()
         await self.app(scope, self.make_receive, self.send)
 
+    # Edit Body
     async def make_receive(self) -> Message:
-        if not self.should_decode_from_msgpack_to_json:
-            return self.message
         assert self.message["type"] == "http.request"
         body = self.message["body"]
         more_body = self.message.get("more_body", False)
@@ -60,29 +54,22 @@ class CustomMiddleware:
         self.message["body"] = dumps(new_body).encode()
         return self.message
 
+    # Edit Url
     async def make_scope(self) -> Scope:
         self.message = await self.receive()
         method_url = await Handle(self.message["body"]).handle(method="url")
-        if method_url is None:
-            pass
-            # return JSONResponse(content="Method doesnt exists")
-        else:
-            self.scope["path"] = method_url
-            return self.scope
+        self.scope["path"] = method_url
+        return self.scope
 
+    # Edit Response
     # async def make_send(self, message: Message) -> None:
-    #     if not self.should_encode_from_json_to_msgpack:
-    #         await self.send(message)
-    #         return
     #     if message["type"] == "http.response.start":
     #         headers = Headers(raw=message["headers"])
     #         if headers["content-type"] != "application/json":
-    #             self.should_encode_from_json_to_msgpack = False
     #             await self.send(message)
     #             return
     #         self.initial_message = message
     #     elif message["type"] == "http.response.body":
-    #         assert self.should_encode_from_json_to_msgpack
     #         body = message.get("body", b"")
     #         more_body = message.get("more_body", False)
     #         if more_body:
