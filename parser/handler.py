@@ -4,10 +4,7 @@ from inspect import signature
 from aiohttp_xmlrpc.common import xml2py, schema, py2xml
 from lxml import etree
 from starlette.routing import NoMatchFound
-from fastapi.responses import Response
 from fastapi import HTTPException
-
-from routes.rpc import test_function
 
 
 class Handle:
@@ -29,13 +26,10 @@ class Handle:
                 xml_request.xpath("//params/param/value")
             )
         )
-        print(args)
         ans = {}
-        count = 0
-        for x in signature(test_function).parameters.keys():
-            ans[x] = args[count]
-            count += 1
-        print(ans)
+        params = [x for x in signature(await self.lookup_endpoint(full_method_name)).parameters.keys()]
+        for x in range(len(args)):
+            ans[params[x]] = args[x]
         return method_url, ans
 
     async def parse_body(self):
@@ -75,7 +69,11 @@ class Handle:
             return sub_api.url_path_for(full_name)
         except NoMatchFound as ex:
             xml_error = Handle.format_error(ex)
-            raise HTTPException(status_code=200, detail=xml_error)
+            return HTTPException(status_code=200, detail=xml_error)
 
-
-
+    @staticmethod
+    async def lookup_endpoint(full_name):
+        from main import sub_api
+        for route in sub_api.routes:
+            if route.name == full_name:
+                return route.endpoint
