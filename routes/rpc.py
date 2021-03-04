@@ -25,7 +25,7 @@ async def test_function(user: User, name: str = Body(...), surname: str = Body(.
 
 @dec(router)
 async def test_function2(item: Item = Body(..., embed=True)):
-    return {"msg": f"Item name -> {item.name}, count -> {item.count}"}
+    return {"msg": f"Item name {item.name}, count {item.count}"}
 
 
 @dec(router)
@@ -47,4 +47,4 @@ async def test_function5(name: str = Body(...), surname: Optional[str] = Body(No
 
 @dec(router)
 async def test_function1():
-    return {"msg": "Я родився"}
+    return {"msg": "Я родився !!!"}

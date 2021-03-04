@@ -79,13 +79,11 @@ class CustomMiddleware:
                     "Streaming the response body isn`t supported yet"
                 )
             body = Handle().build_xml(await Handle().format_success(loads(body)))
-            print(body)
-            print(len(body))
             headers = MutableHeaders(raw=self.initial_message["headers"])
             headers["Content-Type"] = "application/xml"
-            headers["Content_Length"] = str(len(body))
+            headers["Content-Encoding"] = "utf-8"
+            headers["Content-Length"] = str(len(body))
             message["body"] = body
-            print(message["body"], headers["Content_Length"])
             await self.send(self.initial_message)
             await self.send(message)
 
