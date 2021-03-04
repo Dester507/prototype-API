@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 
 class Handle:
-    def __init__(self, xml_body):
+    def __init__(self, xml_body = None):
         self.xml_body = xml_body
         self.THREAD_POOL_EXECUTOR = None
 
@@ -69,7 +69,7 @@ class Handle:
             return sub_api.url_path_for(full_name)
         except NoMatchFound as ex:
             xml_error = Handle.format_error(ex)
-            return HTTPException(status_code=200, detail=xml_error)
+            raise HTTPException(status_code=200, detail=xml_error)
 
     @staticmethod
     async def lookup_endpoint(full_name):
@@ -77,3 +77,24 @@ class Handle:
         for route in sub_api.routes:
             if route.name == full_name:
                 return route.endpoint
+
+    @staticmethod
+    async def format_success(body):
+        xml_response = etree.Element("methodResponse")
+        xml_params = etree.Element("params")
+        xml_param = etree.Element("param")
+        xml_value = etree.Element("value")
+
+        xml_value.append(py2xml(body))
+        xml_param.append(xml_value)
+        xml_params.append(xml_param)
+        xml_response.append(xml_params)
+        return xml_response
+
+    @staticmethod
+    def build_xml(tree):
+        return etree.tostring(
+            tree,
+            xml_declaration=True,
+            encoding="utf-8",
+            )
