@@ -26,6 +26,8 @@ class CustomMiddleware:
         self.app = app
         self.initial_message: Message = {}
         self.message = None
+        self.error_status = False
+        self.error = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         headers = Headers(scope=scope)
@@ -34,9 +36,8 @@ class CustomMiddleware:
             return await self.app(scope, receive, send)
         self.receive = receive
         self.send = send
-        self.scope = scope
-        scope = await self.make_scope()
-        await self.app(scope, self.make_receive, self.make_send)
+        self.scope = await self.make_scope(scope)
+        await self.app(self.scope, self.make_receive, self.make_send)
 
     # Edit Body
     async def make_receive(self) -> Message:
@@ -49,19 +50,28 @@ class CustomMiddleware:
                 raise NotImplementedError(
                     "Streaming the request body isn`t supported yet"
                 )
-        try:
-            self.scope["path"], new_body = await Handle(self.message["body"]).handle()
-        except:
-            raise
-        self.message["body"] = dumps(new_body).encode()
-        return self.message
+        if not self.error_status:
+            try:
+                new_body = await Handle(self.message["body"]).handle()
+                self.message["body"] = dumps(new_body).encode()
+                return self.message
+            except Exception as ex:
+                self.error_status = True
+                self.error = ex
+        else:
+            return self.message
 
     # Edit Url
-    async def make_scope(self) -> Scope:
+    async def make_scope(self, scope: Scope) -> Scope:
         self.message = await self.receive()
-        method_url = await Handle(self.message["body"]).handle(method="url")
-        self.scope["path"] = method_url
-        return self.scope
+        try:
+            method_url = await Handle(self.message["body"]).handle(method="url")
+            scope["path"] = method_url
+            return scope
+        except Exception as ex:
+            self.error_status = True
+            self.error = ex
+            return scope
 
     # Edit Response
     async def make_send(self, message: Message) -> None:
@@ -78,7 +88,13 @@ class CustomMiddleware:
                 raise NotImplementedError(
                     "Streaming the response body isn`t supported yet"
                 )
-            body = Handle().build_xml(await Handle().format_success(loads(body)))
+            if not self.error_status:
+                body = Handle().build_xml(await Handle().format_success(loads(body)))
+            else:
+                body = Handle().build_xml(await Handle().format_error(self.error))
+                self.initial_message["status"] = 200
+                self.error_status = False
+                self.error = None
             headers = MutableHeaders(raw=self.initial_message["headers"])
             headers["Content-Type"] = "application/xml"
             headers["Content-Encoding"] = "utf-8"
